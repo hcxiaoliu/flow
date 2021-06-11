@@ -5,8 +5,10 @@ import com.dragon.flow.constant.FlowFrontConstant;
 import com.dragon.flow.enm.LeaveTypeEnum;
 import com.dragon.flow.main.FlowFrontApplication;
 import com.dragon.flow.model.hr.Leave;
+import com.dragon.flow.model.hr.ProjectStart;
 import com.dragon.flow.model.user.Account;
 import com.dragon.flow.service.hr.ILeaveService;
+import com.dragon.flow.service.hr.ProjectStartService;
 import com.dragon.flow.vo.flowable.runtime.StartProcessInstanceVo;
 import com.dragon.flow.web.resource.BaseResource;
 import com.dragon.tools.common.DateUtil;
@@ -35,6 +37,9 @@ public class LeaveResource extends BaseResource {
     private ILeaveService leaveService;
     @Autowired
     private RestTemplate restTemplate;
+
+    @Autowired
+    private ProjectStartService projectStartService;
 
     @GetMapping(value = "/getLeaveById/{id}", produces = "application/json")
     public ReturnVo getLeaveById(@PathVariable String id){
@@ -80,6 +85,49 @@ public class LeaveResource extends BaseResource {
                 leave.setProcessInstanceId(data);
                 leave.setCreateTime(new Date());
                 this.leaveService.saveLeave(leave);
+            }
+        }
+        return returnVo;
+    }
+
+
+
+    @PostMapping(value = "/addProject", produces = "application/json")
+    public ReturnVo addProjectStart(HttpServletRequest request,@RequestBody ProjectStart project) {
+        String businessKey = IdWorker.get32UUID();
+        //启动流程
+        StartProcessInstanceVo startProcessInstanceVo = new StartProcessInstanceVo();
+        startProcessInstanceVo.setBusinessKey(businessKey);
+        ReturnVo sessionReturnVo = (ReturnVo)request.getSession().getAttribute(FlowFrontConstant.LOGIN_ACCOUNT);
+        Account account = (Account) sessionReturnVo.getData();
+        startProcessInstanceVo.setCurrentUserCode(account.getCode());
+        startProcessInstanceVo.setCreator(account.getCode());
+        startProcessInstanceVo.setFlowLevelFlag(true);
+        startProcessInstanceVo.setAppSn("flow");
+        String enumMsgByType = LeaveTypeEnum.getEnumMsgByType(Integer.valueOf(project.getType()));
+        String time = DateUtil.format(new Date(),"yyyy-MM-dd HH:mm:ss");
+        StringBuffer formName = new StringBuffer();
+        formName.append("项目启动").append("-").append(enumMsgByType).append(" ").append(time);
+        startProcessInstanceVo.setFormName(formName.toString());
+        startProcessInstanceVo.setProcessDefinitionKey("Start");
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("projectType", project.getProjectType());
+//        List<String> userList = new ArrayList<>();
+//        userList.add("10003");
+//        userList.add("10004");
+//        variables.put("userList",userList);
+        startProcessInstanceVo.setVariables(variables);
+        String url = this.getApiUrl(FlowFrontConstant.START_PROCESSINSTANCEBYKEY_URL);
+        HttpHeaders headers = this.createHttpHeaders(request);
+        HttpEntity<StartProcessInstanceVo> httpEntity = new HttpEntity<>(startProcessInstanceVo, headers);
+        ReturnVo returnVo = restTemplate.postForObject(url, httpEntity, ReturnVo.class);
+        if (returnVo != null){
+            String data = (String) returnVo.getData();
+            if (data != null){
+                project.setId(businessKey);
+                project.setProcessInstanceId(data);
+                project.setCreateTime(new Date());
+                this.projectStartService.saveProject(project);
             }
         }
         return returnVo;
